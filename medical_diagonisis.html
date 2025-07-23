@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Data Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: "Warm Neutral Harmony" -->
+    <!-- Application Structure Plan: The SPA is designed as a focused, interactive tool. It starts with a concise introduction (Hero Section) explaining its purpose. The core is the "Live Extraction" section, which provides a direct interface for users to input medical text, trigger the extraction process, and immediately view the highlighted entities and structured results. This allows for direct interaction and understanding of the tool's functionality. This structure prioritizes direct utility and user interaction over a narrative flow, making it suitable for a professional, hosted application. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Project Overview -> Goal: Inform -> Presentation: Hero section with title and brief description -> Interaction: None, serves as an entry point. Justification: Provides immediate context for the application's purpose.
+        - Report Info: Key Features (Dynamic Input, NER) -> Goal: Enable Interaction/Demonstrate -> Presentation: Textarea for user input, "Process Note" button, dynamic highlighted text area -> Interaction: User types/pastes text, clicks button to process, sees real-time highlighting -> Justification: This is the central interactive feature, allowing users to test the extraction with their own data, making the concept highly tangible.
+        - Report Info: Structured Data Output -> Goal: Organize/Present -> Presentation: Dynamic HTML table -> Interaction: None (display only) -> Justification: Clearly shows the valuable, structured end-product of the extraction, essential for understanding the tool's utility.
+        - Report Info: NER Entity Types -> Goal: Summarize/Visualize -> Presentation: Bar Chart (Chart.js/Canvas) showing counts of extracted entity types -> Interaction: Chart updates dynamically with each processed note -> Justification: Provides a quick visual summary of the extracted data's composition, enhancing data clarity.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFBF8; /* Warm neutral background */
+            color: #4A4A4A;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .nav-link {
+            transition: color 0.3s, border-bottom-color 0.3s;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-link:hover {
+            color: #D97706; /* Amber-600 */
+            border-bottom-color: #D97706;
+        }
+        .btn-primary {
+            background-color: #059669; /* Emerald-600 */
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .btn-primary:hover {
+            background-color: #047857; /* Emerald-700 */
+        }
+        .tag {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+        .tag-person { background-color: #DBEAFE; color: #1E40AF; }
+        .tag-date { background-color: #D1FAE5; color: #065F46; }
+        .tag-org { background-color: #FEF3C7; color: #92400E; }
+        .tag-diagnosis { background-color: #FEE2E2; color: #991B1B; }
+        .tag-medication { background-color: #E0E7FF; color: #3730A3; }
+        .highlight {
+            padding: 2px 4px;
+            border-radius: 4px;
+            margin: 0 -4px;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header & Navigation -->
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-800">Medical Data Extractor</h1>
+            <div class="hidden md:flex items-center space-x-8">
+                <a href="#demo" class="nav-link font-medium pb-1">Live Extraction</a>
+                <a href="#results" class="nav-link font-medium pb-1">Extracted Data</a>
+            </div>
+            <button id="mobile-menu-button" class="md:hidden p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500">
+                 <div class="w-6 h-0.5 bg-gray-600 mb-1.5"></div>
+                 <div class="w-6 h-0.5 bg-gray-600"></div>
+            </button>
+        </nav>
+        <div id="mobile-menu" class="hidden md:hidden px-6 pb-4">
+            <a href="#demo" class="block py-2 text-center text-gray-700 hover:bg-gray-100 rounded">Live Extraction</a>
+            <a href="#results" class="block py-2 text-center text-gray-700 hover:bg-gray-100 rounded">Extracted Data</a>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+
+        <!-- Hero Section -->
+        <section id="hero" class="text-center mb-24">
+            <h2 class="text-4xl md:text-5xl font-bold text-gray-800 mb-4">Extract Structured Insights from Medical Text</h2>
+            <p class="max-w-3xl mx-auto text-lg text-gray-600">
+                This tool demonstrates the power of Natural Language Processing (NLP) to convert unstructured clinical notes into actionable, structured data. Simply paste or type your medical text below to see key information extracted in real-time.
+            </p>
+        </section>
+
+        <!-- Live Extraction Section -->
+        <section id="demo" class="mb-24">
+            <div class="text-center mb-12">
+                <h3 class="text-3xl font-bold text-gray-800">Live Medical Data Extraction</h3>
+                <p class="mt-2 text-md text-gray-600">Enter your medical note below and click "Process" to see the extracted entities.</p>
+            </div>
+
+            <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+                <div class="flex flex-col md:flex-row gap-6 mb-6">
+                    <div class="flex-1">
+                        <label for="user-note-input" class="block text-sm font-medium text-gray-700 mb-2">1. Enter Medical Note:</label>
+                        <textarea id="user-note-input" class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500 h-48" placeholder="E.g., Patient: John Doe. Date of Birth: 1970-01-01. Visited St. Jude's Hospital on 2024-07-22. Chief complaint: Patient presented with chronic cough. Diagnosis: Bronchitis. Medication prescribed: Amoxicillin."></textarea>
+                    </div>
+                    <div class="flex-shrink-0 self-end">
+                         <button id="process-button" class="w-full md:w-auto btn-primary font-bold py-3 px-6 rounded-md shadow-sm flex items-center justify-center">
+                            <span class="mr-2">&#9998;</span> Process Note
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-2">Original Input:</h4>
+                        <div id="original-note-display" class="w-full h-64 p-4 bg-gray-50 border rounded-md overflow-y-auto text-gray-700 leading-relaxed whitespace-pre-wrap">
+                            Your input will appear here.
+                        </div>
+                    </div>
+                     <div>
+                        <h4 class="font-semibold text-gray-800 mb-2">Processed Note with Highlighted Entities:</h4>
+                        <div id="highlighted-note-display" class="w-full h-64 p-4 bg-gray-50 border rounded-md overflow-y-auto text-gray-700 leading-relaxed whitespace-pre-wrap">
+                            Processed text with highlighted entities will appear here.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Structured Results Section -->
+        <section id="results" class="mb-24">
+            <div class="text-center mb-12">
+                <h3 class="text-3xl font-bold text-gray-800">Extracted Structured Data</h3>
+                <p class="mt-2 text-md text-gray-600">The identified entities are organized into a clean, tabular format for easy consumption.</p>
+            </div>
+
+             <div class="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Table -->
+                    <div class="overflow-x-auto">
+                        <h4 class="font-semibold text-gray-800 mb-4">Extracted Information Table</h4>
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entity Type</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Extracted Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-table-body" class="bg-white divide-y divide-gray-200">
+                                <tr><td colspan="2" class="px-6 py-4 text-center text-gray-500">Enter a note and click process to see results.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Chart -->
+                    <div>
+                        <h4 class="font-semibold text-gray-800 mb-4 text-center">Extracted Entity Distribution</h4>
+                         <div class="chart-container">
+                            <canvas id="entity-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+    </main>
+    
+    <footer class="bg-gray-100 mt-24">
+        <div class="container mx-auto px-6 py-4 text-center text-gray-600">
+            <p>Medical Data Extractor by [Your Name/Company Name] &copy; 2024</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const userInput = document.getElementById('user-note-input');
+            const originalNoteDisplay = document.getElementById('original-note-display');
+            const highlightedDisplay = document.getElementById('highlighted-note-display');
+            const processButton = document.getElementById('process-button');
+            const tableBody = document.getElementById('results-table-body');
+            const chartCanvas = document.getElementById('entity-chart');
+            
+            let entityChart;
+
+            // Initial state of displays
+            originalNoteDisplay.textContent = 'Your input will appear here.';
+            highlightedDisplay.innerHTML = '<span class="text-gray-400">Processed text with highlighted entities will appear here.</span>';
+            tableBody.innerHTML = '<tr><td colspan="2" class="px-6 py-4 text-center text-gray-500">Enter a note and click process to see results.</td></tr>';
+
+            function simulateExtraction(noteText) {
+                // These regex patterns are simplified for client-side demonstration.
+                // In a real application, this would be handled by a robust NLP model (e.g., spaCy on a backend).
+                const entities = {
+                    "PERSON": [/(Alice Smith|Bob Johnson|Carol White|David Brown|John Doe|Dr\. Emily Green|Dr\. Sarah Lee)/g],
+                    "DATE": [/\d{4}-\d{2}-\d{2}/g],
+                    "ORG": [/(General Hospital|City Medical Center|Community Clinic|St\. Jude's Hospital)/g],
+                    "DIAGNOSIS": [/(Migraine|Hypertension|Asthma|Osteoarthritis|Bronchitis|Type 2 Diabetes|Common Cold)/gi], // Case-insensitive
+                    "MEDICATION": [/(Sumatriptan|Lisinopril|Albuterol|Ibuprofen|Amoxicillin|Metformin)/gi] // Case-insensitive
+                };
+
+                const entityColors = {
+                    "PERSON": "tag-person",
+                    "DATE": "tag-date",
+                    "ORG": "tag-org",
+                    "DIAGNOSIS": "tag-diagnosis",
+                    "MEDICATION": "tag-medication"
+                };
+
+                let highlightedText = noteText;
+                const extractedData = [];
+                
+                Object.entries(entities).forEach(([label, patterns]) => {
+                    patterns.forEach(pattern => {
+                        // Use a temporary string to avoid modifying highlightedText during iteration of matches
+                        // This helps prevent issues with regex indices changing after replacement
+                        let tempText = highlightedText;
+                        const matches = Array.from(noteText.matchAll(pattern)); // Match against original text
+                        
+                        // Sort matches to process from end to start to avoid index issues with replacements
+                        matches.sort((a, b) => b.index - a.index);
+
+                        matches.forEach(match => {
+                            const originalMatch = match[0];
+                            const startIndex = match.index;
+                            const endIndex = startIndex + originalMatch.length;
+
+                            const colorClass = entityColors[label];
+                            const replacement = `<span class="highlight ${colorClass}">${originalMatch}</span>`;
+                            
+                            // Reconstruct the string with the highlight
+                            highlightedText = highlightedText.substring(0, startIndex) + replacement + highlightedText.substring(endIndex);
+
+                            let entityName = label;
+                            if (label === 'PERSON' && originalMatch.toLowerCase().includes('dr.')) {
+                                entityName = 'DOCTOR';
+                            } else if (label === 'PERSON' && noteText.toLowerCase().includes(`patient: ${originalMatch.toLowerCase()}`)) {
+                                entityName = 'PATIENT';
+                            } else if (label === 'DATE' && noteText.toLowerCase().includes(`date of birth: ${originalMatch.toLowerCase()}`)) {
+                                entityName = 'DOB';
+                            } else if (label === 'DATE' && noteText.toLowerCase().includes(`visited.+on ${originalMatch.toLowerCase()}`)) {
+                                entityName = 'VISIT DATE';
+                            }
+
+                            extractedData.push({ type: entityName, value: originalMatch });
+                        });
+                    });
+                });
+                
+                return { highlightedText, extractedData };
+            }
+
+            function processNote() {
+                const noteText = userInput.value.trim();
+                originalNoteDisplay.textContent = noteText; // Display the raw input
+
+                if (!noteText) {
+                    highlightedDisplay.innerHTML = '<span class="text-gray-400">Please enter some text to process.</span>';
+                    tableBody.innerHTML = '<tr><td colspan="2" class="px-6 py-4 text-center text-gray-500">No text entered for processing.</td></tr>';
+                    if (entityChart) {
+                        entityChart.destroy();
+                        entityChart = null;
+                    }
+                    return;
+                }
+                
+                const { highlightedText, extractedData } = simulateExtraction(noteText);
+                
+                highlightedDisplay.innerHTML = highlightedText;
+                
+                tableBody.innerHTML = '';
+                if (extractedData.length > 0) {
+                    // Define a preferred display order for entities in the table
+                    const displayOrder = ['PATIENT', 'DOB', 'VISIT DATE', 'ORG', 'DIAGNOSIS', 'MEDICATION', 'DOCTOR', 'PERSON', 'DATE'];
+                    // Sort the extracted data based on the defined order
+                    const sortedData = extractedData.sort((a, b) => {
+                        const indexA = displayOrder.indexOf(a.type);
+                        const indexB = displayOrder.indexOf(b.type);
+                        // Handle cases where type might not be in displayOrder (put them at the end)
+                        return (indexA === -1 ? Infinity : indexA) - (indexB === -1 ? Infinity : indexB);
+                    });
+
+                    sortedData.forEach(item => {
+                        const row = document.createElement('tr');
+                        const typeCell = document.createElement('td');
+                        const valueCell = document.createElement('td');
+
+                        typeCell.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900';
+                        valueCell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+                        
+                        const typeTag = document.createElement('span');
+                        typeTag.textContent = item.type.replace('_', ' ');
+                        // Determine the base class for the tag (e.g., 'tag-person' from 'PATIENT')
+                        const baseTagClass = 'tag-' + item.type.toLowerCase().split(' ')[0];
+                        typeTag.className = `tag ${baseTagClass}`;
+                        typeCell.appendChild(typeTag);
+
+                        valueCell.textContent = item.value;
+                        
+                        row.appendChild(typeCell);
+                        row.appendChild(valueCell);
+                        tableBody.appendChild(row);
+                    });
+                } else {
+                     tableBody.innerHTML = '<tr><td colspan="2" class="px-6 py-4 text-center text-gray-500">No relevant entities found. Try a different note.</td></tr>';
+                }
+
+                updateChart(extractedData);
+            }
+
+            function updateChart(data) {
+                if (entityChart) {
+                    entityChart.destroy();
+                }
+
+                const counts = data.reduce((acc, item) => {
+                    // Use the more specific type for charting (PATIENT, DOCTOR, DOB, VISIT DATE, etc.)
+                    const type = item.type; 
+                    acc[type] = (acc[type] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const labels = Object.keys(counts);
+                const values = Object.values(counts);
+                const backgroundColors = labels.map(label => {
+                    const colorMap = {
+                        "PATIENT": 'rgba(59, 130, 246, 0.6)', // Blue
+                        "DOCTOR": 'rgba(59, 130, 246, 0.6)', // Blue
+                        "DOB": 'rgba(16, 185, 129, 0.6)', // Emerald
+                        "VISIT DATE": 'rgba(16, 185, 129, 0.6)', // Emerald
+                        "ORG": 'rgba(245, 158, 11, 0.6)', // Amber
+                        "DIAGNOSIS": 'rgba(239, 68, 68, 0.6)', // Red
+                        "MEDICATION": 'rgba(99, 102, 241, 0.6)', // Indigo
+                        "PERSON": 'rgba(59, 130, 246, 0.6)', // Fallback Blue
+                        "DATE": 'rgba(16, 185, 129, 0.6)' // Fallback Emerald
+                    };
+                    return colorMap[label] || 'rgba(156, 163, 175, 0.6)'; // Default gray
+                });
+                const borderColors = backgroundColors.map(color => color.replace('0.6', '1'));
+
+                entityChart = new Chart(chartCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: labels.map(l => l.replace('_', ' ')), // Format labels for display
+                        datasets: [{
+                            label: '# of Entities Extracted',
+                            data: values,
+                            backgroundColor: backgroundColors,
+                            borderColor: borderColors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y', // Horizontal bar chart
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1 // Ensure integer ticks
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false // No legend needed for single dataset
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return ` Count: ${context.raw}`; // Custom tooltip label
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Mobile menu toggle
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+            mobileMenu.addEventListener('click', () => {
+                 mobileMenu.classList.add('hidden'); // Close menu when a link is clicked
+            });
+
+            // Event listener for the process button
+            processButton.addEventListener('click', processNote);
+        });
+    </script>
+</body>
+</html>
